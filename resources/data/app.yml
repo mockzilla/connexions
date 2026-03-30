@@ -6,12 +6,15 @@ port: 2200
 serviceURL: /.services
 contextAreaPrefix: in-
 disableUI: false
-historyDuration: 24h
 
 editor:
   theme: chrome
   darkTheme: cobalt
   fontSize: 14
+
+history:
+  enabled: true
+  duration: 1h
 
 # Uncomment to enable Redis storage for distributed features
 # storage:
