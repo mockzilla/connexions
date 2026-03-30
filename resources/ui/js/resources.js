@@ -418,6 +418,10 @@ export const generateResult = (service, ix, path, method) => {
                         }
                     }
 
+                    const statusBadge = document.getElementById('response-status-badge');
+                    statusBadge.textContent = responseData.status;
+                    statusBadge.className = 'response-status-badge status-' + Math.floor(responseData.status / 100) + 'xx';
+
                     document.getElementById('response-body-container').style.display = 'block';
                     const respContentType = responseData.contentType || '';
                     const respEditorMode = respContentType.includes('application/json') ? 'json' : 'text';

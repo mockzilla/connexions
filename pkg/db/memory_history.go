@@ -17,6 +17,7 @@ type memoryHistoryTable struct {
 	mu          sync.RWMutex
 	entries     []*HistoryEntry
 	latestIndex map[string]*HistoryEntry // lookupKey → latest entry
+	idIndex     map[string]*HistoryEntry // id → entry
 	counter     atomic.Int64
 	cancelFunc  context.CancelFunc
 }
@@ -28,6 +29,7 @@ func newMemoryHistoryTable(_ *memoryTable, clearTimeout time.Duration) *memoryHi
 
 	h := &memoryHistoryTable{
 		latestIndex: make(map[string]*HistoryEntry),
+		idIndex:     make(map[string]*HistoryEntry),
 		cancelFunc:  cancel,
 	}
 
@@ -62,6 +64,7 @@ func (h *memoryHistoryTable) Set(_ context.Context, resource string, req *Histor
 	h.mu.Lock()
 	h.entries = append(h.entries, entry)
 	h.latestIndex[lookupKey(req.Method, req.URL)] = entry
+	h.idIndex[id] = entry
 	h.mu.Unlock()
 
 	return entry
@@ -85,12 +88,8 @@ func (h *memoryHistoryTable) GetByID(_ context.Context, id string) (*HistoryEntr
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	for _, entry := range h.entries {
-		if entry.ID == id {
-			return entry, true
-		}
-	}
-	return nil, false
+	entry, ok := h.idIndex[id]
+	return entry, ok
 }
 
 // Data returns all request records as an ordered log.
@@ -116,6 +115,7 @@ func (h *memoryHistoryTable) Clear(_ context.Context) {
 	defer h.mu.Unlock()
 	h.entries = nil
 	h.latestIndex = make(map[string]*HistoryEntry)
+	h.idIndex = make(map[string]*HistoryEntry)
 }
 
 // cancel stops the auto-clear goroutine.

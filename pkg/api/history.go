@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/mockzilla/connexions/v2/pkg/db"
@@ -22,8 +23,8 @@ func CreateHistoryRoutes(router *Router) error {
 	url = "/" + strings.Trim(url, "/")
 
 	router.Route(url, func(r chi.Router) {
-		r.Get("/*", handler.list)
-		r.Delete("/*", handler.clear)
+		r.Get("/", handler.list)
+		r.Delete("/", handler.clear)
 	})
 
 	return nil
@@ -39,10 +40,27 @@ type HistoryListResponse struct {
 	Items []*db.HistoryEntry `json:"items"`
 }
 
+// HistorySummary is a slim version of HistoryEntry for list responses (no bodies).
+type HistorySummary struct {
+	ID        string              `json:"id"`
+	Resource  string              `json:"resource"`
+	Request   *db.HistoryRequest  `json:"request,omitempty"`
+	Response  *db.HistoryResponse `json:"response,omitempty"`
+	CreatedAt time.Time           `json:"createdAt"`
+}
+
+// HistorySummaryListResponse is the response for history list endpoint.
+type HistorySummaryListResponse struct {
+	Items []*HistorySummary `json:"items"`
+}
+
 // getService looks up the service by name and checks that history is enabled for it.
 // Returns the DB or writes an error response and returns nil.
 func (h *HistoryHandler) getService(w http.ResponseWriter, r *http.Request) (string, db.DB) {
-	serviceName := h.getServiceName(r)
+	serviceName := r.URL.Query().Get("service")
+	if serviceName == RootServiceName {
+		serviceName = ""
+	}
 
 	svc := h.router.GetServices()[serviceName]
 	if svc == nil {
@@ -65,13 +83,13 @@ func (h *HistoryHandler) getService(w http.ResponseWriter, r *http.Request) (str
 }
 
 func (h *HistoryHandler) list(w http.ResponseWriter, r *http.Request) {
-	serviceName, database := h.getService(w, r)
+	_, database := h.getService(w, r)
 	if database == nil {
 		return
 	}
 
-	// Check for ID path segment after service name
-	id := h.getEntryID(r, serviceName)
+	// Single entry by ID
+	id := r.URL.Query().Get("id")
 	if id != "" {
 		entry, ok := database.History().GetByID(r.Context(), id)
 		if !ok {
@@ -82,11 +100,33 @@ func (h *HistoryHandler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// List: return summaries without request/response bodies
 	items := database.History().Data(r.Context())
-	if items == nil {
-		items = make([]*db.HistoryEntry, 0)
+	summaries := make([]*HistorySummary, 0, len(items))
+	for _, e := range items {
+		s := &HistorySummary{
+			ID:        e.ID,
+			Resource:  e.Resource,
+			CreatedAt: e.CreatedAt,
+		}
+		if e.Request != nil {
+			s.Request = &db.HistoryRequest{
+				Method:    e.Request.Method,
+				URL:       e.Request.URL,
+				RequestID: e.Request.RequestID,
+			}
+		}
+		if e.Response != nil {
+			s.Response = &db.HistoryResponse{
+				StatusCode:     e.Response.StatusCode,
+				ContentType:    e.Response.ContentType,
+				IsFromUpstream: e.Response.IsFromUpstream,
+				Duration:       e.Response.Duration,
+			}
+		}
+		summaries = append(summaries, s)
 	}
-	NewJSONResponse(w).Send(&HistoryListResponse{Items: items})
+	NewJSONResponse(w).Send(&HistorySummaryListResponse{Items: summaries})
 }
 
 func (h *HistoryHandler) clear(w http.ResponseWriter, r *http.Request) {
@@ -96,44 +136,5 @@ func (h *HistoryHandler) clear(w http.ResponseWriter, r *http.Request) {
 	}
 
 	database.History().Clear(r.Context())
-	NewJSONResponse(w).Send(&HistoryListResponse{Items: make([]*db.HistoryEntry, 0)})
-}
-
-// getServiceName extracts the service name from the request path.
-func (h *HistoryHandler) getServiceName(r *http.Request) string {
-	historyURL := h.router.Config().History.URL
-	prefix := "/" + strings.Trim(historyURL, "/") + "/"
-	name := strings.TrimPrefix(r.URL.Path, prefix)
-
-	// Strip any trailing path segments (entry ID)
-	if idx := strings.Index(name, "/"); idx != -1 {
-		name = name[:idx]
-	}
-
-	// Handle root service
-	if name == RootServiceName {
-		name = ""
-	}
-
-	return name
-}
-
-// getEntryID extracts the entry ID from the request path (segment after service name).
-func (h *HistoryHandler) getEntryID(r *http.Request, serviceName string) string {
-	historyURL := h.router.Config().History.URL
-	prefix := "/" + strings.Trim(historyURL, "/") + "/"
-	path := strings.TrimPrefix(r.URL.Path, prefix)
-
-	// For root service, the URL name is RootServiceName
-	urlName := serviceName
-	if serviceName == "" {
-		urlName = RootServiceName
-	}
-
-	rest := strings.TrimPrefix(path, urlName)
-	rest = strings.TrimPrefix(rest, "/")
-	if rest == "" {
-		return ""
-	}
-	return rest
+	NewJSONResponse(w).Send(&HistorySummaryListResponse{Items: make([]*HistorySummary, 0)})
 }

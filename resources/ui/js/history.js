@@ -211,7 +211,11 @@ const renderEntries = (items, service) => {
         row.style.cursor = 'pointer';
         row.onclick = () => {
             navi.applySelection(`history-${entry.id}`, 'selected-resource');
-            showDetail(entry);
+            const detailUrl = `${config.historyUrl}?service=${encodeURIComponent(service)}&id=${encodeURIComponent(entry.id)}`;
+            fetch(detailUrl)
+                .then(res => res.json())
+                .then(full => showDetail(full))
+                .catch(err => console.error('Failed to fetch entry:', err));
         };
 
         const numCell = document.createElement('td');
@@ -257,7 +261,7 @@ const renderEntries = (items, service) => {
 };
 
 const fetchAndRender = (service) => {
-    const historyApiUrl = `${config.historyUrl}/${service}`;
+    const historyApiUrl = `${config.historyUrl}?service=${encodeURIComponent(service)}`;
     return fetch(historyApiUrl)
         .then(res => res.json())
         .then(data => {
@@ -293,7 +297,7 @@ export const show = (match) => {
     document.getElementById('history-refresh').onclick = () => fetchAndRender(service);
     document.getElementById('history-clear').onclick = () => {
         if (!confirm(`Clear history for ${displayName}?`)) return;
-        const historyApiUrl = `${config.historyUrl}/${service}`;
+        const historyApiUrl = `${config.historyUrl}?service=${encodeURIComponent(service)}`;
         fetch(historyApiUrl, {method: 'DELETE'})
             .then(() => fetchAndRender(service))
             .catch(err => console.error('Failed to clear history:', err));

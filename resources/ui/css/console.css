@@ -15,6 +15,9 @@
     --code-bg: #1e293b;
     --code-text: #e2e8f0;
     --input-bg: #f8fafc;
+    --scrollbar-thumb: #c1c9d4;
+    --scrollbar-thumb-hover: #a0aab6;
+    --scrollbar-track: transparent;
 }
 
 [data-theme="dark"] {
@@ -29,6 +32,9 @@
     --code-bg: #002240;
     --code-text: #ffffff;
     --input-bg: #002240;
+    --scrollbar-thumb: #475569;
+    --scrollbar-thumb-hover: #64748b;
+    --scrollbar-track: transparent;
 }
 
 * { box-sizing: border-box; }
@@ -629,4 +635,33 @@ pre, .code {
 
 /* History duration and source columns */
 .history-duration { text-align: right; color: var(--text-muted); font-size: 12px; white-space: nowrap; }
+
+/* Response status badge */
+.response-status-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 8px;
+    border-radius: 4px;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+.response-status-badge.status-2xx { color: #10b981; background: rgba(16, 185, 129, 0.12); }
+.response-status-badge.status-3xx { color: #3b82f6; background: rgba(59, 130, 246, 0.12); }
+.response-status-badge.status-4xx { color: #f59e0b; background: rgba(245, 158, 11, 0.12); }
+.response-status-badge.status-5xx { color: #ef4444; background: rgba(239, 68, 68, 0.12); }
+
+/* Scrollbars */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+::-webkit-scrollbar-corner { background: var(--scrollbar-track); }
 
