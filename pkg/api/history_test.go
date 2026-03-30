@@ -28,7 +28,7 @@ func TestCreateHistoryRoutes(t *testing.T) {
 		err := CreateHistoryRoutes(router)
 		assert.NoError(t, err)
 
-		req := httptest.NewRequest(http.MethodGet, "/.history/test-service", nil)
+		req := httptest.NewRequest(http.MethodGet, "/.history?service=test-service", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
@@ -43,7 +43,7 @@ func TestCreateHistoryRoutes(t *testing.T) {
 		err := CreateHistoryRoutes(router)
 		assert.NoError(t, err)
 
-		req := httptest.NewRequest(http.MethodGet, "/.history/test-service", nil)
+		req := httptest.NewRequest(http.MethodGet, "/.history?service=test-service", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
@@ -72,19 +72,19 @@ func TestHistoryHandler_list(t *testing.T) {
 		registerTestService(router, service)
 		_ = CreateHistoryRoutes(router)
 
-		req := httptest.NewRequest(http.MethodGet, "/.history/test-service", nil)
+		req := httptest.NewRequest(http.MethodGet, "/.history?service=test-service", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
-		var response HistoryListResponse
+		var response HistorySummaryListResponse
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.Empty(t, response.Items)
 	})
 
-	t.Run("Returns history entries", func(t *testing.T) {
+	t.Run("Returns history summaries without bodies", func(t *testing.T) {
 		router := newTestRouter(t)
 		router.config.History.URL = "/.history"
 
@@ -95,11 +95,11 @@ func TestHistoryHandler_list(t *testing.T) {
 		}
 		registerTestService(router, service)
 
-		// Add a history entry
 		database := router.GetDB("test-service")
 		database.History().Set(context.Background(), "/users", &db.HistoryRequest{
 			Method: "GET",
 			URL:    "/test-service/users",
+			Body:   []byte(`{"query":"all"}`),
 		}, &db.HistoryResponse{
 			StatusCode: 200,
 			Body:       []byte(`{"ok":true}`),
@@ -107,18 +107,21 @@ func TestHistoryHandler_list(t *testing.T) {
 
 		_ = CreateHistoryRoutes(router)
 
-		req := httptest.NewRequest(http.MethodGet, "/.history/test-service", nil)
+		req := httptest.NewRequest(http.MethodGet, "/.history?service=test-service", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
-		var response HistoryListResponse
+		var response HistorySummaryListResponse
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.Len(t, response.Items, 1)
 		assert.Equal(t, "GET", response.Items[0].Request.Method)
 		assert.Equal(t, 200, response.Items[0].Response.StatusCode)
+		// Bodies should be omitted in list
+		assert.Nil(t, response.Items[0].Request.Body)
+		assert.Nil(t, response.Items[0].Response.Body)
 	})
 
 	t.Run("Returns 404 for unknown service", func(t *testing.T) {
@@ -126,7 +129,7 @@ func TestHistoryHandler_list(t *testing.T) {
 		router.config.History.URL = "/.history"
 		_ = CreateHistoryRoutes(router)
 
-		req := httptest.NewRequest(http.MethodGet, "/.history/nonexistent", nil)
+		req := httptest.NewRequest(http.MethodGet, "/.history?service=nonexistent", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
@@ -136,7 +139,7 @@ func TestHistoryHandler_list(t *testing.T) {
 }
 
 func TestHistoryHandler_getByID(t *testing.T) {
-	t.Run("Returns single entry by ID", func(t *testing.T) {
+	t.Run("Returns single entry by ID with full bodies", func(t *testing.T) {
 		router := newTestRouter(t)
 		router.config.History.URL = "/.history"
 
@@ -151,6 +154,7 @@ func TestHistoryHandler_getByID(t *testing.T) {
 		entry := database.History().Set(context.Background(), "/users", &db.HistoryRequest{
 			Method: "POST",
 			URL:    "/test-service/users",
+			Body:   []byte(`{"name":"test"}`),
 		}, &db.HistoryResponse{
 			StatusCode: 201,
 			Body:       []byte(`{"id":1}`),
@@ -158,7 +162,7 @@ func TestHistoryHandler_getByID(t *testing.T) {
 
 		_ = CreateHistoryRoutes(router)
 
-		req := httptest.NewRequest(http.MethodGet, "/.history/test-service/"+entry.ID, nil)
+		req := httptest.NewRequest(http.MethodGet, "/.history?service=test-service&id="+entry.ID, nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
@@ -170,6 +174,9 @@ func TestHistoryHandler_getByID(t *testing.T) {
 		assert.Equal(t, entry.ID, got.ID)
 		assert.Equal(t, "POST", got.Request.Method)
 		assert.Equal(t, 201, got.Response.StatusCode)
+		// Full entry should include bodies
+		assert.NotNil(t, got.Request.Body)
+		assert.NotNil(t, got.Response.Body)
 	})
 
 	t.Run("Returns 404 for unknown entry ID", func(t *testing.T) {
@@ -184,7 +191,7 @@ func TestHistoryHandler_getByID(t *testing.T) {
 		registerTestService(router, service)
 		_ = CreateHistoryRoutes(router)
 
-		req := httptest.NewRequest(http.MethodGet, "/.history/test-service/nonexistent-id", nil)
+		req := httptest.NewRequest(http.MethodGet, "/.history?service=test-service&id=nonexistent-id", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
@@ -219,13 +226,13 @@ func TestHistoryHandler_clear(t *testing.T) {
 		assert.Equal(t, 1, database.History().Len(context.Background()))
 
 		// Clear
-		req := httptest.NewRequest(http.MethodDelete, "/.history/test-service", nil)
+		req := httptest.NewRequest(http.MethodDelete, "/.history?service=test-service", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
-		var response HistoryListResponse
+		var response HistorySummaryListResponse
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.Empty(t, response.Items)
@@ -239,11 +246,100 @@ func TestHistoryHandler_clear(t *testing.T) {
 		router.config.History.URL = "/.history"
 		_ = CreateHistoryRoutes(router)
 
-		req := httptest.NewRequest(http.MethodDelete, "/.history/nonexistent", nil)
+		req := httptest.NewRequest(http.MethodDelete, "/.history?service=nonexistent", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
+
+func TestHistoryHandler_slashInServiceName(t *testing.T) {
+	t.Run("Returns history for service with slash in name", func(t *testing.T) {
+		router := newTestRouter(t)
+		router.config.History.URL = "/.history"
+
+		service := &mockService{
+			name:   "adyen/v71",
+			config: config.NewServiceConfig(),
+			routes: func(r chi.Router) {},
+		}
+		registerTestService(router, service)
+		_ = CreateHistoryRoutes(router)
+
+		req := httptest.NewRequest(http.MethodGet, "/.history?service=adyen/v71", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response HistorySummaryListResponse
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.Empty(t, response.Items)
+	})
+
+	t.Run("Returns single entry by ID for service with slash in name", func(t *testing.T) {
+		router := newTestRouter(t)
+		router.config.History.URL = "/.history"
+
+		service := &mockService{
+			name:   "adyen/v71",
+			config: config.NewServiceConfig(),
+			routes: func(r chi.Router) {},
+		}
+		registerTestService(router, service)
+
+		database := router.GetDB("adyen/v71")
+		entry := database.History().Set(context.Background(), "/payments", &db.HistoryRequest{
+			Method: "POST",
+			URL:    "/adyen/v71/payments",
+		}, &db.HistoryResponse{
+			StatusCode: 200,
+			Body:       []byte(`{"ok":true}`),
+		})
+
+		_ = CreateHistoryRoutes(router)
+
+		req := httptest.NewRequest(http.MethodGet, "/.history?service=adyen/v71&id="+entry.ID, nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var got db.HistoryEntry
+		err := json.Unmarshal(w.Body.Bytes(), &got)
+		assert.NoError(t, err)
+		assert.Equal(t, entry.ID, got.ID)
+	})
+
+	t.Run("Clears history for service with slash in name", func(t *testing.T) {
+		router := newTestRouter(t)
+		router.config.History.URL = "/.history"
+
+		service := &mockService{
+			name:   "adyen/v71",
+			config: config.NewServiceConfig(),
+			routes: func(r chi.Router) {},
+		}
+		registerTestService(router, service)
+
+		database := router.GetDB("adyen/v71")
+		database.History().Set(context.Background(), "/payments", &db.HistoryRequest{
+			Method: "POST",
+			URL:    "/adyen/v71/payments",
+		}, &db.HistoryResponse{
+			StatusCode: 200,
+		})
+
+		_ = CreateHistoryRoutes(router)
+
+		req := httptest.NewRequest(http.MethodDelete, "/.history?service=adyen/v71", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, 0, database.History().Len(context.Background()))
 	})
 }
 
@@ -269,13 +365,13 @@ func TestHistoryHandler_rootService(t *testing.T) {
 
 		_ = CreateHistoryRoutes(router)
 
-		req := httptest.NewRequest(http.MethodGet, "/.history/"+RootServiceName, nil)
+		req := httptest.NewRequest(http.MethodGet, "/.history?service="+RootServiceName, nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
-		var response HistoryListResponse
+		var response HistorySummaryListResponse
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.Len(t, response.Items, 1)
@@ -299,7 +395,7 @@ func TestHistoryHandler_serviceHistoryDisabled(t *testing.T) {
 		registerTestService(router, service)
 		_ = CreateHistoryRoutes(router)
 
-		req := httptest.NewRequest(http.MethodGet, "/.history/no-history", nil)
+		req := httptest.NewRequest(http.MethodGet, "/.history?service=no-history", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
