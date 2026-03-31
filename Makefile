@@ -76,10 +76,11 @@ gen-discover:
 
 .PHONY: gen-service
 gen-service:
-	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
+	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ] && [ -z "$(type)" ]; then \
 		echo "Error: Please provide a path to the OpenAPI spec or static directory."; \
 		echo "Usage: make gen-service <path-to-spec> name=<service-name>"; \
 		echo "       make gen-service <url> name=<service-name>"; \
+		echo "       make gen-service name=<service-name> type=static"; \
 		echo "       make gen-service <path> name=<service-name> type=static"; \
 		exit 1; \
 	fi
@@ -105,6 +106,7 @@ gen-service:
 	go run ./cmd/gen/service $$FLAGS "$$SPEC_PATH"
 # Usage: make gen-service testdata/specs/3.0/misc/petstore.swagger.io.yml name=petstore
 # Usage: make gen-service https://petstore3.swagger.io/api/v3/openapi.json name=petstore
+# Usage: make gen-service name=myservice type=static
 # Usage: make gen-service path/to/static name=myservice type=static
 # Usage: make gen-service spec.yml name=myservice output=./services
 
