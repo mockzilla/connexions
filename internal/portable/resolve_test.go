@@ -124,7 +124,7 @@ func TestIsPortableMode(t *testing.T) {
 
 	t.Run("detects directory with static subdir", func(t *testing.T) {
 		staticDir := t.TempDir()
-		svcDir := filepath.Join(staticDir, "static", "myapi", "get", "users")
+		svcDir := filepath.Join(staticDir, "static", "myapi", "users", "get")
 		require.NoError(t, os.MkdirAll(svcDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(svcDir, "index.json"), []byte(`{"id":1}`), 0o644))
 		assert.True(t, IsPortableMode([]string{staticDir}))
@@ -203,7 +203,7 @@ func TestResolveSpecs(t *testing.T) {
 
 	t.Run("resolves static directory into specs", func(t *testing.T) {
 		rootDir := t.TempDir()
-		svcDir := filepath.Join(rootDir, "static", "myapi", "get", "users")
+		svcDir := filepath.Join(rootDir, "static", "myapi", "users", "get")
 		require.NoError(t, os.MkdirAll(svcDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(svcDir, "index.json"), []byte(`{"id":1,"name":"John"}`), 0o644))
 
@@ -223,7 +223,7 @@ func TestResolveSpecs(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(rootDir, "petstore.yml"), []byte("openapi: 3.0.0\ninfo:\n  title: test\n  version: '1'\npaths: {}"), 0o644))
 
 		// Add a static service
-		svcDir := filepath.Join(rootDir, "static", "myapi", "get", "users")
+		svcDir := filepath.Join(rootDir, "static", "myapi", "users", "get")
 		require.NoError(t, os.MkdirAll(svcDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(svcDir, "index.json"), []byte(`{"id":1}`), 0o644))
 

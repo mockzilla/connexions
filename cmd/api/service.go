@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -57,6 +58,7 @@ type setupTemplateData struct {
 	ServiceName string // User-provided name (e.g., "pet/store/v1")
 	PackageName string // Valid Go package name derived from ServiceName (e.g., "pet_store_v1")
 	SpecPath    string // Path or URL to OpenAPI spec (empty for local openapi.yml/json)
+	ServiceType string // "openapi" or "static"
 }
 
 // GenerateService generates all service files (types, handlers, register.go, middleware.go).
@@ -73,13 +75,19 @@ func GenerateService(opts ServiceOptions) error {
 	var setupDir string
 	var serviceDir string
 
-	// Default output to current directory
+	// Default output directory:
+	// - From a service directory (has setup/): use current directory (go generate)
+	// - From project root: use services directory from config
 	if opts.OutputDir == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
 			return fmt.Errorf("getting current directory: %w", err)
 		}
-		opts.OutputDir = cwd
+		if fileExists(filepath.Join(cwd, "setup")) {
+			opts.OutputDir = cwd
+		} else {
+			opts.OutputDir = config.NewPaths(cwd).Services
+		}
 	}
 
 	// If name is provided and output directory doesn't end with the name,
@@ -109,10 +117,11 @@ func GenerateService(opts ServiceOptions) error {
 
 	// For static services, regenerate openapi.yml from the data directory
 	// This ensures changes to static files are reflected in the spec
-	if isStaticService(opts.SpecPath, opts.ServiceType) && opts.SpecPath != "" {
-		specContents, err := GenerateSpecFromStaticDir(opts.SpecPath, opts.Name)
+	staticDataDir := filepath.Join(setupDir, "data")
+	if dirHasFiles(staticDataDir) && isStaticService(staticDataDir, opts.ServiceType) {
+		specContents, err := GenerateSpecFromStaticDir(staticDataDir, opts.Name)
 		if err != nil {
-			return fmt.Errorf("generating spec from static directory %s: %w", opts.SpecPath, err)
+			return fmt.Errorf("generating spec from static directory %s: %w", staticDataDir, err)
 		}
 
 		specPath := filepath.Join(setupDir, "openapi.yml")
@@ -451,27 +460,25 @@ func ensureSetupDir(opts ServiceOptions, serviceDir, setupDir string) error {
 		return fmt.Errorf("creating setup directory: %w", err)
 	}
 
+	// For static services, populate the data directory with sample files
+	if serviceType == "static" {
+		if err := copyEmbeddedDir(templatesFS, "templates/setup/data", filepath.Join(setupDir, "data")); err != nil {
+			return fmt.Errorf("creating setup data directory: %w", err)
+		}
+	}
+
 	// Prepare template data
 	// For URLs, we keep the URL as SpecPath so it's embedded in generate.go
-	// For static services, use relative path from service directory (e.g., "data" or "./data")
 	// For local OpenAPI files, we leave SpecPath empty (will fallback to local openapi.yml/json)
 	specPath := ""
 	if files.IsURL(opts.SpecPath) {
 		specPath = opts.SpecPath
-	} else if serviceType == "static" && opts.SpecPath != "" {
-		// For static services, make path relative to service directory
-		// Since go generate runs from the package directory, we need a relative path
-		relPath, err := filepath.Rel(serviceDir, opts.SpecPath)
-		if err != nil {
-			// Fallback to just the base name if relative path fails
-			relPath = filepath.Base(opts.SpecPath)
-		}
-		specPath = relPath
 	}
 	data := setupTemplateData{
 		ServiceName: serviceName,
 		PackageName: types.ToSnakeCase(serviceName),
 		SpecPath:    specPath,
+		ServiceType: serviceType,
 	}
 
 	// Render and write template files
@@ -567,6 +574,40 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
+// dirHasFiles checks if a directory exists and contains at least one file.
+func dirHasFiles(path string) bool {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return false
+	}
+	return len(entries) > 0
+}
+
+// copyEmbeddedDir copies a directory tree from the embedded FS to the local filesystem.
+func copyEmbeddedDir(fsys embed.FS, srcDir, destDir string) error {
+	return fs.WalkDir(fsys, srcDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
+		}
+		destPath := filepath.Join(destDir, relPath)
+
+		if d.IsDir() {
+			return os.MkdirAll(destPath, 0755)
+		}
+
+		content, err := fsys.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(destPath, content, 0644)
+	})
+}
+
 // isStaticService checks if the service is a static service based on the spec path and service type.
 func isStaticService(specPath, serviceType string) bool {
 	if serviceType == "static" {
@@ -589,9 +630,18 @@ func handleSetupSourceSpec(opts ServiceOptions, setupDir, serviceName, serviceTy
 	}
 
 	if serviceType == "static" {
-		specContents, err := GenerateSpecFromStaticDir(opts.SpecPath, serviceName)
+		// Copy static files into setup/data/ so they're self-contained
+		dataDir := filepath.Join(setupDir, "data")
+		if err := files.CopyDirectory(opts.SpecPath, dataDir); err != nil {
+			return fmt.Errorf("copying static files from %s to %s: %w", opts.SpecPath, dataDir, err)
+		}
+		if !opts.Quiet {
+			fmt.Printf("Copied static files to: %s\n", dataDir)
+		}
+
+		specContents, err := GenerateSpecFromStaticDir(dataDir, serviceName)
 		if err != nil {
-			return fmt.Errorf("generating spec from static directory %s: %w", opts.SpecPath, err)
+			return fmt.Errorf("generating spec from static directory %s: %w", dataDir, err)
 		}
 		specPath := filepath.Join(setupDir, "openapi.yml")
 		if err := os.WriteFile(specPath, specContents, 0644); err != nil {

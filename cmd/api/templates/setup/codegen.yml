@@ -16,8 +16,8 @@ generate:
     output:
       overwrite: true
     validation:
-      request: true
-      response: true
+      request: {{if eq .ServiceType "static"}}false{{else}}true{{end}}
+      response: false
     service: {}
     # middleware: {}
 error-mapping:

@@ -18,88 +18,94 @@ type Route struct {
 	Content     string
 }
 
+// httpMethods is the set of recognized HTTP methods used to identify method directories.
+var httpMethods = map[string]bool{
+	"get": true, "post": true, "put": true, "patch": true,
+	"delete": true, "head": true, "options": true, "trace": true,
+}
+
 // scanStaticFiles scans a static directory and returns all routes.
-// Directory structure: <staticDir>/<method>/<path>/index.<ext>
+// Directory structure: <staticDir>/<path>/<method>/index.<ext>
+// Example: data/users/get/index.json -> GET /users
 func scanStaticFiles(staticDir string) ([]Route, error) {
 	var routes []Route
 
-	// Walk through method directories (get, post, etc.)
-	methodDirs, err := os.ReadDir(staticDir)
-	if err != nil {
-		return nil, fmt.Errorf("reading static directory: %w", err)
-	}
-
-	for _, methodDir := range methodDirs {
-		if !methodDir.IsDir() {
-			continue
+	err := filepath.Walk(staticDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
 		}
 
-		method := strings.ToUpper(methodDir.Name())
-		methodPath := filepath.Join(staticDir, methodDir.Name())
-
-		// Walk through all subdirectories to find response files
-		err := filepath.Walk(methodPath, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-
-			if info.IsDir() {
-				return nil
-			}
-
-			// Get extension and check if it's a supported content type
-			ext := filepath.Ext(info.Name())
-			contentType := getContentType(ext)
-			if contentType == "" {
-				return nil // Skip unsupported files
-			}
-
-			// Get the path relative to method directory
-			relPath, err := filepath.Rel(methodPath, filepath.Dir(path))
-			if err != nil {
-				return err
-			}
-
-			// Convert directory path to URL path
-			urlPath := "/" + strings.ReplaceAll(relPath, string(filepath.Separator), "/")
-			if relPath == "." {
-				urlPath = "/"
-			}
-
-			// Get filename without extension
-			filename := strings.TrimSuffix(info.Name(), ext)
-
-			// If filename is not "index", append it to the URL path
-			if filename != "index" {
-				if urlPath == "/" {
-					urlPath = "/" + info.Name()
-				} else {
-					urlPath = urlPath + "/" + info.Name()
-				}
-			}
-
-			// Read file content
-			content, err := os.ReadFile(path)
-			if err != nil {
-				return fmt.Errorf("reading file %s: %w", path, err)
-			}
-
-			// Trim trailing whitespace
-			contentStr := strings.TrimRight(string(content), "\n\r\t ")
-
-			routes = append(routes, Route{
-				Method:      method,
-				Path:        urlPath,
-				ContentType: contentType,
-				Content:     contentStr,
-			})
-
+		if info.IsDir() {
 			return nil
+		}
+
+		// Get extension and check if it's a supported content type
+		ext := filepath.Ext(info.Name())
+		contentType := getContentType(ext)
+		if contentType == "" {
+			return nil
+		}
+
+		// Get the path relative to static directory
+		relPath, err := filepath.Rel(staticDir, path)
+		if err != nil {
+			return err
+		}
+
+		// Split into segments: [...pathSegments, method, filename]
+		segments := strings.Split(filepath.ToSlash(relPath), "/")
+		if len(segments) < 2 {
+			return nil
+		}
+
+		// The method is the parent directory of the file
+		methodDir := segments[len(segments)-2]
+		if !httpMethods[strings.ToLower(methodDir)] {
+			return nil
+		}
+		method := strings.ToUpper(methodDir)
+
+		// Path segments are everything before the method directory
+		pathSegments := segments[:len(segments)-2]
+
+		// Build URL path
+		urlPath := "/"
+		if len(pathSegments) > 0 {
+			urlPath = "/" + strings.Join(pathSegments, "/")
+		}
+
+		// Get filename without extension
+		filename := strings.TrimSuffix(info.Name(), ext)
+
+		// If filename is not "index", append it to the URL path
+		if filename != "index" {
+			if urlPath == "/" {
+				urlPath = "/" + info.Name()
+			} else {
+				urlPath = urlPath + "/" + info.Name()
+			}
+		}
+
+		// Read file content
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("reading file %s: %w", path, err)
+		}
+
+		contentStr := strings.TrimRight(string(content), "\n\r\t ")
+
+		routes = append(routes, Route{
+			Method:      method,
+			Path:        urlPath,
+			ContentType: contentType,
+			Content:     contentStr,
 		})
 
-		if err != nil {
-			return nil, fmt.Errorf("walking method directory %s: %w", method, err)
-		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("walking static directory: %w", err)
 	}
 
 	return routes, nil
@@ -178,6 +184,32 @@ func generateOpenAPIFromStatic(routes []Route, serviceName string) ([]byte, erro
 			},
 		}
 
+		// Add an optional query parameter so all methods get ServiceRequestOptions
+		// with RawRequest, giving access to headers, query parameters, and the raw HTTP request.
+		operation["parameters"] = []any{
+			map[string]any{
+				"name":     "q",
+				"in":       "query",
+				"required": false,
+				"schema":   map[string]any{"type": "string"},
+			},
+		}
+
+		// For non-GET methods, also accept any request body.
+		if method != "get" {
+			operation["requestBody"] = map[string]any{
+				"required": false,
+				"content": map[string]any{
+					"application/json": map[string]any{
+						"schema": map[string]any{
+							"type":                 "object",
+							"additionalProperties": true,
+						},
+					},
+				},
+			}
+		}
+
 		pathItem[method] = operation
 	}
 
@@ -187,7 +219,8 @@ func generateOpenAPIFromStatic(routes []Route, serviceName string) ([]byte, erro
 		return nil, fmt.Errorf("failed to marshal OpenAPI spec: %w", err)
 	}
 
-	return yamlBytes, nil
+	header := "# This file is auto-generated from static files in setup/data/.\n# Do not edit manually - modify the static files and regenerate instead.\n"
+	return append([]byte(header), yamlBytes...), nil
 }
 
 // schemaToMap converts our schema.Schema to a map for OpenAPI spec.
