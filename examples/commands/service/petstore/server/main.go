@@ -33,7 +33,6 @@ func main() {
 	_ = api.CreateHomeRoutes(router)
 	_ = api.CreateServiceRoutes(router)
 	_ = api.CreateHistoryRoutes(router)
-	_ = api.CreateServiceConfigRoutes(router)
 
 	// Register this service directly
 	handler.RegisterAPIRouter(router)
