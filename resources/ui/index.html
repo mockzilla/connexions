@@ -4,9 +4,9 @@
     <title>Connexions: {{.AppConfig.Title}}</title>
     <script>
         const appConfig = {
-            homeUrl: "{{.AppConfig.HomeURL}}",
-            serviceUrl: "{{.AppConfig.ServiceURL}}",
-            historyUrl: "{{.AppConfig.History.URL}}",
+            homeUrl: "{{.AppConfig.BaseURL}}{{.AppConfig.HomeURL}}",
+            serviceUrl: "{{.AppConfig.BaseURL}}{{.AppConfig.ServiceURL}}",
+            historyUrl: "{{.AppConfig.BaseURL}}{{.AppConfig.History.URL}}",
             editor: {
                 theme: "{{.AppConfig.Editor.Theme}}",
                 darkTheme: "{{.AppConfig.Editor.DarkTheme}}",
@@ -17,16 +17,16 @@
         console.log(`loaded appConfig:`, appConfig)
     </script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
-    {{if .Contents.Styles}}{{.Contents.Styles}}{{else}}<link rel="icon" type="image/x-icon" href="icons/favicon.ico">{{end}}
-    <link type="text/css" rel="stylesheet" href="css/console.css?v={{.Version}}"/>
-    <link type="text/css" rel="stylesheet" href="css/overwrite.css?v={{.Version}}"/>
-    <script type="module" src="js/index.js?v={{.Version}}" defer=""></script>
+    {{if .Contents.Styles}}{{.Contents.Styles}}{{else}}<link rel="icon" type="image/x-icon" href="{{.AppConfig.AssetsURL}}favicon.ico">{{end}}
+    <link type="text/css" rel="stylesheet" href="{{.AppConfig.AssetsURL}}css/console.css?v={{.Version}}"/>
+    <link type="text/css" rel="stylesheet" href="{{.AppConfig.AssetsURL}}css/overwrite.css?v={{.Version}}"/>
+    <script type="module" src="{{.AppConfig.AssetsURL}}js/index.js?v={{.Version}}" defer=""></script>
 </head>
 <body>
 <div class="app">
     {{if .Contents.Header}}{{.Contents.Header}}{{else}}<header class="header">
         <div class="header-logo">
-            <a href="{{.AppConfig.HomeURL}}"><img class="logo" src="images/logo-top.png" title="{{.AppConfig.Title}}"></a>
+            <a href="{{.AppConfig.BaseURL}}{{.AppConfig.HomeURL}}"><img class="logo" src="{{.AppConfig.AssetsURL}}images/logo-top.png" title="{{.AppConfig.Title}}"></a>
         </div>
         <div class="header-title">{{.AppConfig.Title}}</div>
         <div class="header-message">

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/caarlos0/env/v11"
@@ -10,12 +11,17 @@ import (
 
 // AppConfig is the app configuration.
 type AppConfig struct {
-	Title             string            `yaml:"title"`
-	Port              int               `yaml:"port"`
-	BaseURL           string            `yaml:"baseURL" env:"APP_BASE_URL"`
-	InternalURL       string            `yaml:"internalURL" env:"APP_INTERNAL_URL"`
-	HomeURL           string            `yaml:"homeURL"`
-	ServiceURL        string            `yaml:"serviceURL"`
+	Title       string `yaml:"title"`
+	Port        int    `yaml:"port"`
+	BaseURL     string `yaml:"baseURL" env:"APP_BASE_URL"`
+	InternalURL string `yaml:"internalURL" env:"APP_INTERNAL_URL"`
+	HomeURL     string `yaml:"homeURL"`
+	ServiceURL  string `yaml:"serviceURL" env:"APP_SERVICE_URL"`
+
+	// AssetsURL is the base URL for static UI assets (CSS, JS, images, icons).
+	// Empty means assets are served with relative paths (default).
+	AssetsURL string `yaml:"assetsURL" env:"APP_ASSETS_URL"`
+
 	ContextAreaPrefix string            `yaml:"contextAreaPrefix"`
 	DisableUI         bool              `yaml:"disableUI"`
 	Paths             Paths             `yaml:"-"`
@@ -91,6 +97,10 @@ func NewAppConfigFromBytes(bts []byte, baseDir string) (*AppConfig, error) {
 	if err := env.Parse(cfg); err != nil {
 		return nil, fmt.Errorf("applying env overrides: %w", err)
 	}
+
+	// Normalize BaseURL: strip trailing slash so template concatenation
+	// (e.g. BaseURL + ServiceURL) never produces double slashes.
+	cfg.BaseURL = strings.TrimRight(cfg.BaseURL, "/")
 
 	return cfg, nil
 }
