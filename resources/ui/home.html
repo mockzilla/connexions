@@ -1,19 +1,32 @@
-<h3>API Explorer</h3>
+<div class="home-hero">
+    <h2>Your API, simulated in seconds</h2>
+    <p>Mockzilla provisions a dedicated simulation server from your OpenAPI specs on every push.
+    No config files. No shared sandboxes. Just a real URL your team can hit immediately.</p>
+</div>
 
-<b>API Explorer</b> allows to create and serve mock APIs.<br/>
+<h3>How it works</h3>
+<ol>
+    <li>Push or open a PR &mdash; your specs are packaged and uploaded automatically</li>
+    <li>A dedicated simulation is provisioned in your nearest region</li>
+    <li>Your simulation is live at <code>api.mockzilla.org/{org}/{repo}/{ref}/</code></li>
+</ol>
 
-<h3>Goal</h3>
+<h3>Explorer</h3>
 <ul>
-    <li>- provide a simple tool to work with API mocks</li>
-    <li>- combine multiple APIs into one</li>
-    <li>- generate meaningful responses</li>
+    <li>Browse all routes from your OpenAPI spec in the sidebar</li>
+    <li>Fire requests directly from the UI and inspect responses</li>
+    <li>View request history with full headers, body, and timing</li>
+    <li>Replay any recorded request instantly &mdash; tweak parameters and compare responses</li>
+    <li>Override upstream URL, latency, caching, and replay behavior per-request</li>
+    <li>Set custom headers and save reusable request presets</li>
 </ul>
 
-<h3>Features</h3>
+<h3>Simulation behavior</h3>
 <ul>
-    <li>- Using upstream services with fallback to mocks</li>
-    <li>- Randomized response contents, allowing you to redefine the response for any path</li>
-    <li>- Modify response contents on the fly by providing custom middleware functions</li>
-    <li>- Mimic error responses and status codes</li>
-    <li>- Configurable latency in responses</li>
+    <li>Responses generated from your spec schemas &mdash; realistic types, formats, and constraints</li>
+    <li>Fake data helpers: <code>{fake:uuid.v4}</code>, <code>{fake:internet.email}</code>, and <a href="https://mockzilla.github.io/connexions/fake-list/#aliases" target="_blank">more</a></li>
+    <li>Configurable latency to simulate slow upstreams or network conditions</li>
+    <li>Mimic error responses and specific status codes on any route</li>
+    <li>Proxy to a real upstream &mdash; Mockzilla falls back to simulation automatically when it is unavailable</li>
+    <li>Combine multiple OpenAPI specs into a single unified API surface</li>
 </ul>

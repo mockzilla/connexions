@@ -21,6 +21,22 @@
     {{if .Contents.Styles}}{{.Contents.Styles}}{{else}}<link rel="icon" type="image/x-icon" href="{{.AppConfig.AssetsURL}}favicon.ico">{{end}}
     <link type="text/css" rel="stylesheet" href="{{.AppConfig.AssetsURL}}css/console.css?v={{.Version}}"/>
     <link type="text/css" rel="stylesheet" href="{{.AppConfig.AssetsURL}}css/overwrite.css?v={{.Version}}"/>
+    <script type="importmap">
+    {
+      "imports": {
+        "./config.js": "{{.AppConfig.AssetsURL}}js/config.js?v={{.Version}}",
+        "./commons.js": "{{.AppConfig.AssetsURL}}js/commons.js?v={{.Version}}",
+        "./navi.js": "{{.AppConfig.AssetsURL}}js/navi.js?v={{.Version}}",
+        "./services.js": "{{.AppConfig.AssetsURL}}js/services.js?v={{.Version}}",
+        "./home.js": "{{.AppConfig.AssetsURL}}js/home.js?v={{.Version}}",
+        "./resources.js": "{{.AppConfig.AssetsURL}}js/resources.js?v={{.Version}}",
+        "./history.js": "{{.AppConfig.AssetsURL}}js/history.js?v={{.Version}}",
+        "./configuration.js": "{{.AppConfig.AssetsURL}}js/configuration.js?v={{.Version}}",
+        "./validators.js": "{{.AppConfig.AssetsURL}}js/validators.js?v={{.Version}}",
+        "./presets.js": "{{.AppConfig.AssetsURL}}js/presets.js?v={{.Version}}"
+      }
+    }
+    </script>
     <script type="module" src="{{.AppConfig.AssetsURL}}js/index.js?v={{.Version}}" defer=""></script>
 </head>
 <body>
