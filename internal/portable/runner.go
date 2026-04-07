@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -28,9 +27,21 @@ const (
 
 // Run starts the server in portable mode - serving mock responses directly from OpenAPI specs.
 func Run(args []string) int {
-	// Set up colored text logger for portable mode (user-facing tool)
+	// LOG_LEVEL can be: debug, info, warn, error, none (default: info)
+	logLevel := slog.LevelInfo
+	switch os.Getenv("LOG_LEVEL") {
+	case "debug":
+		logLevel = slog.LevelDebug
+	case "warn":
+		logLevel = slog.LevelWarn
+	case "error":
+		logLevel = slog.LevelError
+	case "none":
+		logLevel = slog.Level(99)
+	}
+
 	logger := slog.New(tint.NewHandler(os.Stdout, &tint.Options{
-		Level:      slog.LevelInfo,
+		Level:      logLevel,
 		TimeFormat: time.Kitchen,
 	}))
 	slog.SetDefault(logger)
@@ -38,7 +49,7 @@ func Run(args []string) int {
 	fl, positional := parseFlags(args)
 	specs := resolveSpecs(positional)
 	if len(specs) == 0 {
-		log.Println("No OpenAPI spec files found")
+		slog.Error("No OpenAPI spec files found")
 		return exitCodeError
 	}
 
@@ -48,15 +59,15 @@ func Run(args []string) int {
 	// Load unified config (app + per-service)
 	cfg, err := loadPortableConfig(fl.config, baseDir)
 	if err != nil {
-		log.Printf("Failed to load config: %v", err)
-		return exitCodeError
+		slog.Error("Failed to load config, using defaults", "error", err)
+		cfg = &portableConfig{}
 	}
 
 	// Load per-service contexts
 	contexts, err := loadContexts(fl.context)
 	if err != nil {
-		log.Printf("Failed to load contexts: %v", err)
-		return exitCodeError
+		slog.Error("Failed to load contexts, continuing without contexts", "error", err)
+		contexts = nil
 	}
 
 	// Resolve app config: use from file or defaults
@@ -67,7 +78,7 @@ func Run(args []string) int {
 
 	// Environment variables override file/default values.
 	if err := env.Parse(appCfg); err != nil {
-		log.Printf("Failed to apply env overrides: %v", err)
+		slog.Error("Failed to apply env overrides", "error", err)
 	}
 
 	// --port flag wins over everything
@@ -96,19 +107,19 @@ func Run(args []string) int {
 		ctxBytes := contexts[name]
 
 		if err := registerService(router, specPath, svcCfg, ctxBytes, handlers); err != nil {
-			log.Printf("Failed to register %s: %v", specPath, err)
+			slog.Error("Failed to register service", "spec", specPath, "error", err)
 			continue
 		}
 	}
 
 	if len(handlers) == 0 {
-		log.Println("No services registered")
+		slog.Error("No services registered")
 		return exitCodeError
 	}
 
 	// Log registered services
 	for name := range handlers {
-		log.Printf("  /%s", name)
+		slog.Info("Registered service", "path", "/"+name)
 	}
 
 	// Start server
@@ -122,9 +133,10 @@ func Run(args []string) int {
 	}
 
 	go func() {
-		log.Printf("Connexions portable mode on http://localhost:%d%s", appCfg.Port, appCfg.HomeURL)
+		slog.Info(fmt.Sprintf("Connexions portable mode on http://localhost:%d%s", appCfg.Port, appCfg.HomeURL))
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("Server failed: %v", err)
+			slog.Error("Server failed", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -136,16 +148,16 @@ func Run(args []string) int {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down...")
+	slog.Info("Shutting down...")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Printf("Server forced to shutdown: %v", err)
+		slog.Error("Server forced to shutdown", "error", err)
 		return exitCodeError
 	}
 
-	log.Println("Server exited")
+	slog.Info("Server exited")
 	return exitCodeShutdown
 }
 
@@ -155,12 +167,12 @@ func Run(args []string) int {
 func RunFS(fsys fs.FS, args []string) int {
 	dir, err := os.MkdirTemp("", "connexions-portable-fs-*")
 	if err != nil {
-		log.Printf("Failed to create temp dir: %v", err)
+		slog.Error("Failed to create temp dir", "error", err)
 		return exitCodeError
 	}
 
 	if err := extractFS(fsys, dir); err != nil {
-		log.Printf("Failed to extract FS: %v", err)
+		slog.Error("Failed to extract FS", "error", err)
 		return exitCodeError
 	}
 

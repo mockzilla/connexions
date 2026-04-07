@@ -930,7 +930,8 @@ paths:
 
 	t.Run("Creates eager registry by default", func(t *testing.T) {
 		cfg := codegen.NewDefaultConfiguration()
-		registry := NewRegistryFromSpec(specBytes, cfg, nil)
+		registry, err := NewRegistryFromSpec(specBytes, cfg, nil)
+		assert.NoError(t, err)
 		assert.NotNil(t, registry)
 
 		// Should be TypeDefinitionRegistry (eager)
@@ -945,7 +946,8 @@ paths:
 	t.Run("Creates lazy registry when LazyLoad is true", func(t *testing.T) {
 		cfg := codegen.NewDefaultConfiguration()
 		specOptions := &config.SpecOptions{LazyLoad: true}
-		registry := NewRegistryFromSpec(specBytes, cfg, specOptions)
+		registry, err := NewRegistryFromSpec(specBytes, cfg, specOptions)
+		assert.NoError(t, err)
 		assert.NotNil(t, registry)
 
 		// Should be LazyTypeDefinitionRegistry
@@ -965,13 +967,15 @@ paths:
 		cfg := codegen.NewDefaultConfiguration()
 
 		// Eager registry
-		eagerRegistry := NewRegistryFromSpec(specBytes, cfg, nil)
+		eagerRegistry, err := NewRegistryFromSpec(specBytes, cfg, nil)
+		assert.NoError(t, err)
 		respSchema := eagerRegistry.GetResponseSchema("/users", "GET")
 		assert.NotNil(t, respSchema)
 		assert.Equal(t, "application/json", respSchema.ContentType)
 
 		// Lazy registry
-		lazyRegistry := NewRegistryFromSpec(specBytes, cfg, &config.SpecOptions{LazyLoad: true})
+		lazyRegistry, err := NewRegistryFromSpec(specBytes, cfg, &config.SpecOptions{LazyLoad: true})
+		assert.NoError(t, err)
 		respSchema = lazyRegistry.GetResponseSchema("/users", "GET")
 		assert.NotNil(t, respSchema)
 		assert.Equal(t, "application/json", respSchema.ContentType)
@@ -981,21 +985,21 @@ paths:
 		assert.Nil(t, respSchema)
 	})
 
-	t.Run("Panics on invalid spec", func(t *testing.T) {
+	t.Run("Returns error on invalid spec", func(t *testing.T) {
 		cfg := codegen.NewDefaultConfiguration()
 		invalidSpec := []byte(`invalid yaml: [`)
 
-		assert.Panics(t, func() {
-			NewRegistryFromSpec(invalidSpec, cfg, nil)
-		})
+		registry, err := NewRegistryFromSpec(invalidSpec, cfg, nil)
+		assert.Error(t, err)
+		assert.Nil(t, registry)
 	})
 
-	t.Run("Panics on invalid spec with LazyLoad", func(t *testing.T) {
+	t.Run("Returns error on invalid spec with LazyLoad", func(t *testing.T) {
 		cfg := codegen.NewDefaultConfiguration()
 		invalidSpec := []byte(`invalid yaml: [`)
 
-		assert.Panics(t, func() {
-			NewRegistryFromSpec(invalidSpec, cfg, &config.SpecOptions{LazyLoad: true})
-		})
+		registry, err := NewRegistryFromSpec(invalidSpec, cfg, &config.SpecOptions{LazyLoad: true})
+		assert.Error(t, err)
+		assert.Nil(t, registry)
 	})
 }

@@ -101,7 +101,7 @@ func runServer() int {
 	_ = godotenv.Load(fmt.Sprintf("%s/.env", appDir), fmt.Sprintf("%s/.env.dist", appDir))
 
 	// Determine log level from environment variable
-	// LOG_LEVEL can be: debug, info, warn, error (default: info)
+	// LOG_LEVEL can be: debug, info, warn, error, none (default: info)
 	logLevel := slog.LevelInfo
 	switch os.Getenv("LOG_LEVEL") {
 	case "debug":
@@ -110,6 +110,8 @@ func runServer() int {
 		logLevel = slog.LevelWarn
 	case "error":
 		logLevel = slog.LevelError
+	case "none":
+		logLevel = slog.Level(99)
 	}
 
 	// Use JSON handler by default.

@@ -214,21 +214,21 @@ func NewTypeDefinitionRegistry(parseCtx *codegen.ParseContext, maxRecursionDepth
 // NewRegistryFromSpec creates an OperationRegistry from raw OpenAPI spec bytes.
 // This is a convenience function that handles parsing and registry creation.
 // If specOptions.LazyLoad is true, operations are parsed on-demand for faster startup.
-func NewRegistryFromSpec(specBytes []byte, codegenCfg codegen.Configuration, specOptions *config.SpecOptions) OperationRegistry {
+func NewRegistryFromSpec(specBytes []byte, codegenCfg codegen.Configuration, specOptions *config.SpecOptions) (OperationRegistry, error) {
 	if specOptions != nil && specOptions.LazyLoad {
 		registry, err := NewLazyTypeDefinitionRegistry(specBytes, codegenCfg, specOptions)
 		if err != nil {
-			panic("failed to create lazy registry: " + err.Error())
+			return nil, fmt.Errorf("creating lazy registry: %w", err)
 		}
-		return registry
+		return registry, nil
 	}
 
 	parseCtx, errs := CreateParseContext(specBytes, codegenCfg, specOptions)
 	if len(errs) > 0 {
-		panic("failed to parse OpenAPI spec: " + errs[0].Error())
+		return nil, fmt.Errorf("parsing OpenAPI spec: %w", errs[0])
 	}
 
-	return NewTypeDefinitionRegistry(parseCtx, 0, specBytes)
+	return NewTypeDefinitionRegistry(parseCtx, 0, specBytes), nil
 }
 
 func resolveCodegenSchema(schema *codegen.GoSchema, tdLookIp map[string]*codegen.TypeDefinition, state map[string]*codegen.GoSchema) *codegen.GoSchema {

@@ -66,9 +66,9 @@ func TestNewFactory_WithSpecOptions(t *testing.T) {
 func TestNewFactory_InvalidSpec(t *testing.T) {
 	assert := assert2.New(t)
 
-	assert.Panics(func() {
-		_, _ = NewFactory([]byte(`invalid yaml: [`))
-	})
+	f, err := NewFactory([]byte(`invalid yaml: [`))
+	assert.Error(err)
+	assert.Nil(f)
 }
 
 func TestFactory_Operations(t *testing.T) {
