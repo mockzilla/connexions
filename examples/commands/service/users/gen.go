@@ -737,7 +737,14 @@ func RegisterAPIRouter(router *api.Router) {
 	codegenCfg = codegenCfg.Merge(oapicodegen.NewDefaultConfiguration())
 
 	// Create the typedef registry from the OpenAPI spec
-	registry := typedef.NewRegistryFromSpec(openapiSpec, codegenCfg, cfg.SpecOptions)
+	registry, err := typedef.NewRegistryFromSpec(openapiSpec, codegenCfg, cfg.SpecOptions)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Failed to create registry for %s", serviceName),
+			"error", err,
+			"service", serviceName,
+		)
+		return
+	}
 
 	// Create the generator with service contexts
 	orderedCtx := generator.LoadServiceContext(contextSrc, router.GetContexts())

@@ -64,7 +64,11 @@ func NewFactory(specBytes []byte, opts ...FactoryOption) (*Factory, error) {
 	if fc.codegenCfg != nil {
 		codegenCfg = fc.codegenCfg.WithDefaults()
 	}
-	registry := typedef.NewRegistryFromSpec(specBytes, codegenCfg, fc.specOptions)
+
+	registry, err := typedef.NewRegistryFromSpec(specBytes, codegenCfg, fc.specOptions)
+	if err != nil {
+		return nil, fmt.Errorf("creating registry: %w", err)
+	}
 
 	defaultContexts := generator.LoadDefaultContexts()
 	orderedCtx := generator.LoadServiceContext(fc.serviceContext, defaultContexts)
