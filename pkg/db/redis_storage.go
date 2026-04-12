@@ -7,9 +7,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/caarlos0/env/v11"
 	"github.com/mockzilla/connexions/v2/pkg/config"
 	"github.com/redis/go-redis/v9"
 )
+
+func init() {
+	Register("redis", openRedis)
+}
 
 // Ensure redisStorage implements Storage interface.
 var _ Storage = (*redisStorage)(nil)
@@ -45,6 +50,7 @@ func newRedisStorage(cfg *config.RedisConfig) (*redisStorage, error) {
 	defer cancel()
 
 	if err := client.Ping(ctx).Err(); err != nil {
+		_ = client.Close()
 		return nil, fmt.Errorf("failed to connect to redis: %w", err)
 	}
 
@@ -123,4 +129,17 @@ func (db *redisServiceDB) Table(name string) Table {
 // Close releases resources (no-op for Redis service DB, storage handles cleanup).
 func (db *redisServiceDB) Close() {
 	// Nothing to close - the shared storage owns the Redis client
+}
+
+func openRedis(options map[string]any) (Storage, error) {
+	cfg, err := ParseOptions[config.RedisConfig](options)
+	if err != nil {
+		return nil, fmt.Errorf("parsing redis options: %w", err)
+	}
+
+	if err := env.Parse(cfg); err != nil {
+		return nil, fmt.Errorf("applying redis env overrides: %w", err)
+	}
+
+	return newRedisStorage(cfg)
 }

@@ -16,7 +16,10 @@ history:
   enabled: true
   duration: 1h
 
-# Uncomment to enable Redis storage for distributed features
+# Uncomment to enable a storage driver.
+# Built-in drivers: memory (default), redis.
+# External drivers (e.g. dynamodb) are available via separate packages.
+#
 # storage:
 #   type: redis
 #   redis:
