@@ -54,10 +54,23 @@ func TestNewStorage(t *testing.T) {
 		assert.True(t, isMemory)
 		storage.Close()
 	})
+
+	t.Run("redis via driver config with invalid config falls back to memory", func(t *testing.T) {
+		cfg := &config.StorageConfig{
+			Type: config.StorageTypeRedis,
+			DriverConfig: map[string]any{
+				"address": "invalid:99999",
+			},
+		}
+		storage := NewStorage(cfg)
+		assert.NotNil(t, storage)
+		_, isMemory := storage.(*memoryStorage)
+		assert.True(t, isMemory)
+		storage.Close()
+	})
 }
 
 func TestStorageInterface(t *testing.T) {
-	// Compile-time check that types implement Storage interface
 	var _ Storage = (*memoryStorage)(nil)
 	var _ Storage = (*redisStorage)(nil)
 }

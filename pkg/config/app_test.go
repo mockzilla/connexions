@@ -79,6 +79,53 @@ func TestStorageConfig(t *testing.T) {
 	})
 }
 
+func TestStorageConfig_DriverOptions(t *testing.T) {
+	assert := assert2.New(t)
+
+	t.Run("returns DriverConfig when set", func(t *testing.T) {
+		cfg := &StorageConfig{
+			Type:         StorageTypeRedis,
+			DriverConfig: map[string]any{"address": "myhost:6379"},
+			Redis:        &RedisConfig{Address: "other:6379"},
+		}
+		opts := cfg.DriverOptions()
+		assert.Equal("myhost:6379", opts["address"])
+	})
+
+	t.Run("falls back to redis typed config", func(t *testing.T) {
+		cfg := &StorageConfig{
+			Type: StorageTypeRedis,
+			Redis: &RedisConfig{
+				Address:  "localhost:6379",
+				Password: "secret",
+				DB:       2,
+			},
+		}
+		opts := cfg.DriverOptions()
+		assert.Equal("localhost:6379", opts["address"])
+		assert.Equal("secret", opts["password"])
+		assert.Equal(2, opts["db"])
+	})
+
+	t.Run("returns nil for redis without typed config", func(t *testing.T) {
+		cfg := &StorageConfig{Type: StorageTypeRedis}
+		opts := cfg.DriverOptions()
+		assert.Nil(opts)
+	})
+
+	t.Run("returns nil for unknown type without DriverConfig", func(t *testing.T) {
+		cfg := &StorageConfig{Type: "custom"}
+		opts := cfg.DriverOptions()
+		assert.Nil(opts)
+	})
+
+	t.Run("returns nil for memory type", func(t *testing.T) {
+		cfg := &StorageConfig{Type: StorageTypeMemory}
+		opts := cfg.DriverOptions()
+		assert.Nil(opts)
+	})
+}
+
 func TestRedisConfig(t *testing.T) {
 	assert := assert2.New(t)
 
@@ -182,6 +229,37 @@ storage:
 		assert.Equal("localhost:6379", cfg.Storage.Redis.Address)
 		assert.Equal("secret", cfg.Storage.Redis.Password)
 		assert.Equal(1, cfg.Storage.Redis.DB)
+	})
+
+	t.Run("extracts driver config from type-named section", func(t *testing.T) {
+		yaml := []byte(`
+storage:
+  type: dynamodb
+  dynamodb:
+    table: connexions
+    region: us-east-1
+`)
+		cfg, err := NewAppConfigFromBytes(yaml, "/test")
+		assert.NoError(err)
+		assert.NotNil(cfg.Storage)
+		assert.Equal(StorageType("dynamodb"), cfg.Storage.Type)
+		assert.Equal("connexions", cfg.Storage.DriverConfig["table"])
+		assert.Equal("us-east-1", cfg.Storage.DriverConfig["region"])
+	})
+
+	t.Run("extracts redis driver config", func(t *testing.T) {
+		yaml := []byte(`
+storage:
+  type: redis
+  redis:
+    address: localhost:6379
+    password: secret
+`)
+		cfg, err := NewAppConfigFromBytes(yaml, "/test")
+		assert.NoError(err)
+		assert.NotNil(cfg.Storage.DriverConfig)
+		assert.Equal("localhost:6379", cfg.Storage.DriverConfig["address"])
+		assert.Equal("secret", cfg.Storage.DriverConfig["password"])
 	})
 
 	t.Run("parses baseURL and internalURL", func(t *testing.T) {

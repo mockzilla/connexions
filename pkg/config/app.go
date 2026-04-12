@@ -98,6 +98,19 @@ func NewAppConfigFromBytes(bts []byte, baseDir string) (*AppConfig, error) {
 		return nil, fmt.Errorf("applying env overrides: %w", err)
 	}
 
+	// Extract driver-specific config from the YAML section matching the storage type.
+	// e.g. for type: dynamodb, capture the "dynamodb:" map.
+	if typeName := string(cfg.Storage.Type); typeName != "" {
+		var raw map[string]any
+		if err := yaml.Unmarshal(bts, &raw); err == nil {
+			if storageRaw, ok := raw["storage"].(map[string]any); ok {
+				if driverOpts, ok := storageRaw[typeName].(map[string]any); ok {
+					cfg.Storage.DriverConfig = driverOpts
+				}
+			}
+		}
+	}
+
 	// Normalize BaseURL: strip trailing slash so template concatenation
 	// (e.g. BaseURL + ServiceURL) never produces double slashes.
 	cfg.BaseURL = strings.TrimRight(cfg.BaseURL, "/")
@@ -123,9 +136,44 @@ const (
 )
 
 // StorageConfig configures shared storage for distributed features.
+//
+// Each driver's options live under a YAML key matching the type name:
+//
+//	storage:
+//	  type: redis
+//	  redis:
+//	    address: localhost:6379
+//
+// DriverConfig is populated automatically from the matching section.
 type StorageConfig struct {
-	Type  StorageType  `yaml:"type" env:"STORAGE_TYPE"`
+	Type         StorageType    `yaml:"type" env:"STORAGE_TYPE"`
+	DriverConfig map[string]any `yaml:"-"`
+
+	// Redis is kept for backward compatibility with env tags (REDIS_HOST, etc.).
 	Redis *RedisConfig `yaml:"redis"`
+}
+
+// DriverOptions returns the driver-specific config map.
+// It prefers DriverConfig (extracted from the type-named YAML section).
+// Falls back to converting the typed Redis config for backward compatibility.
+func (c *StorageConfig) DriverOptions() map[string]any {
+	if len(c.DriverConfig) > 0 {
+		return c.DriverConfig
+	}
+
+	if c.Type == StorageTypeRedis && c.Redis != nil {
+		data, err := yaml.Marshal(c.Redis)
+		if err != nil {
+			return nil
+		}
+		var opts map[string]any
+		if err := yaml.Unmarshal(data, &opts); err != nil {
+			return nil
+		}
+		return opts
+	}
+
+	return nil
 }
 
 // RedisConfig configures Redis connection.
