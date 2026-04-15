@@ -317,7 +317,7 @@ export const generateResult = (service, ix, path, method) => {
 
             // Use service name for the URL prefix, converting .root back to empty string
             const servicePrefix = service === '.root' ? '' : `/${service}`;
-            curlBlock.textContent = `curl --request ${method} \\\n'${config.baseUrl}${servicePrefix}${reqPath}'`;
+            curlBlock.textContent = `curl --request ${method.toUpperCase()} \\\n'${config.baseUrl}${servicePrefix}${reqPath}'`;
             if (reqContentType) {
                 curlBlock.textContent += ` \\\n--header 'Content-Type: ${reqContentType}'`
             }
