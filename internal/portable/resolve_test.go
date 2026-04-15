@@ -122,6 +122,10 @@ func TestIsPortableMode(t *testing.T) {
 		assert.True(t, IsPortableMode([]string{specPath, "https://example.com/api.json"}))
 	})
 
+	t.Run("detects non-existent spec file arg", func(t *testing.T) {
+		assert.True(t, IsPortableMode([]string{"/nonexistent/petstore.json"}))
+	})
+
 	t.Run("detects directory with static subdir", func(t *testing.T) {
 		staticDir := t.TempDir()
 		svcDir := filepath.Join(staticDir, "static", "myapi", "users", "get")

@@ -28,7 +28,7 @@ func IsPortableMode(args []string) bool {
 		if strings.HasPrefix(arg, "-") {
 			continue
 		}
-		if isURL(arg) {
+		if isURL(arg) || isSpecFile(arg) {
 			return true
 		}
 		info, err := os.Stat(arg)
@@ -45,8 +45,6 @@ func IsPortableMode(args []string) bool {
 					return true
 				}
 			}
-		} else if isSpecFile(arg) {
-			return true
 		}
 	}
 	return false
@@ -76,6 +74,9 @@ func resolveSpecs(args []string) []string {
 		}
 		info, err := os.Stat(arg)
 		if err != nil {
+			if isSpecFile(arg) {
+				slog.Error("Spec file not found", "path", arg)
+			}
 			continue
 		}
 		if info.IsDir() {
