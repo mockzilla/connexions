@@ -16,6 +16,8 @@ import (
 
 const upstreamErrorKey ctxKey = "upstreamError"
 
+const stickySourceTable = "sticky_source"
+
 // GetUpstreamError returns the upstream error string stored in the request context, if any.
 func GetUpstreamError(req *http.Request) string {
 	if v, ok := req.Context().Value(upstreamErrorKey).(string); ok {
@@ -59,10 +61,21 @@ func CreateUpstreamRequestMiddleware(params *Params) func(http.Handler) http.Han
 			reqLog := RequestLog(log, req)
 			reqLog.Debug("Service has upstream service defined")
 
+			if cfg.StickyTimeout > 0 {
+				if _, ok := params.DB().Table(stickySourceTable).Get(req.Context(), svcCfg.Name); ok {
+					reqLog.Info("Sticky source active, skipping upstream", "service", svcCfg.Name)
+					next.ServeHTTP(w, req)
+					return
+				}
+			}
+
 			resp, err := getUpstreamResponse(log, svcCfg, params, req)
 
 			// If an upstream service returns a successful response, write it and return immediately
 			if err == nil && resp != nil {
+				if cfg.StickyTimeout > 0 {
+					params.DB().Table(stickySourceTable).Delete(req.Context(), svcCfg.Name)
+				}
 				SetRequestIDHeader(w, req)
 				SetDurationHeader(w, req)
 				w.Header().Set(ResponseHeaderSource, ResponseHeaderSourceUpstream)
@@ -84,7 +97,7 @@ func CreateUpstreamRequestMiddleware(params *Params) func(http.Handler) http.Han
 					failOn = &config.DefaultFailOnStatus
 				}
 				var httpErr *upstreamHTTPError
-				if len(*failOn) > 0 && errors.As(err, &httpErr) && failOn.Is(httpErr.StatusCode) {
+				if len(*failOn) > 0 && errors.As(err, &httpErr) && failOn.Is(httpErr.StatusCode, httpErr.Body) {
 					reqLog.Info("Upstream error matches fail-on, returning directly",
 						"status", httpErr.StatusCode,
 					)
@@ -130,6 +143,9 @@ func CreateUpstreamRequestMiddleware(params *Params) func(http.Handler) http.Han
 
 			// Proceed to the next handler if no upstream service matched
 			if err != nil {
+				if cfg.StickyTimeout > 0 {
+					params.DB().Table(stickySourceTable).Set(req.Context(), svcCfg.Name, "generated", cfg.StickyTimeout)
+				}
 				ctx := context.WithValue(req.Context(), upstreamErrorKey, err.Error())
 				req = req.WithContext(ctx)
 			}

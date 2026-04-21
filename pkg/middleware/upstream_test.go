@@ -596,6 +596,160 @@ func TestCreateUpstreamRequestMiddleware(t *testing.T) {
 		assert.Equal("Hello, from local!", string(w.buf))
 	})
 
+	t.Run("sticky source skips upstream for all clients after generator fallback", func(t *testing.T) {
+		upstreamCalls := 0
+		upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			upstreamCalls++
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error": "server down"}`))
+		}))
+		defer upstreamServer.Close()
+
+		params := newTestParams(&config.ServiceConfig{
+			Name: "test",
+			Upstream: &config.UpstreamConfig{
+				URL:           upstreamServer.URL,
+				StickyTimeout: 30 * time.Second,
+			},
+		})
+
+		f := CreateUpstreamRequestMiddleware(params)
+
+		// First request: upstream fails, falls back to generator, sets sticky marker
+		w1 := NewBufferedResponseWriter()
+		req1 := httptest.NewRequest(http.MethodGet, "/test/foo", nil)
+		req1.RemoteAddr = "10.0.0.1:12345"
+		f(handler).ServeHTTP(w1, req1)
+		waitForAsync()
+
+		assert.Equal(1, upstreamCalls)
+		assert.Equal("Hello, from local!", string(w1.buf))
+
+		// Second request from a different client: upstream is skipped (service-wide sticky)
+		w2 := NewBufferedResponseWriter()
+		req2 := httptest.NewRequest(http.MethodGet, "/test/bar", nil)
+		req2.RemoteAddr = "10.0.0.99:9999"
+		f(handler).ServeHTTP(w2, req2)
+		waitForAsync()
+
+		assert.Equal(1, upstreamCalls) // still 1 - upstream was not called
+		assert.Equal("Hello, from local!", string(w2.buf))
+	})
+
+	t.Run("sticky source cleared on successful upstream response", func(t *testing.T) {
+		callCount := 0
+		upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			callCount++
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"ok": true}`))
+		}))
+		defer upstreamServer.Close()
+
+		params := newTestParams(&config.ServiceConfig{
+			Name: "test",
+			Upstream: &config.UpstreamConfig{
+				URL:           upstreamServer.URL,
+				StickyTimeout: 30 * time.Second,
+			},
+		})
+
+		// Pre-set a sticky marker for this service
+		params.DB().Table("sticky_source").Set(context.Background(), "test", "generated", 30*time.Second)
+
+		f := CreateUpstreamRequestMiddleware(params)
+
+		// Verify sticky marker exists
+		_, exists := params.DB().Table("sticky_source").Get(context.Background(), "test")
+		assert.True(exists)
+
+		// Request hits sticky, goes to generator
+		w1 := NewBufferedResponseWriter()
+		req1 := httptest.NewRequest(http.MethodGet, "/test/foo", nil)
+		f(handler).ServeHTTP(w1, req1)
+		waitForAsync()
+
+		assert.Equal(0, callCount) // upstream was skipped
+		assert.Equal("Hello, from local!", string(w1.buf))
+
+		// Now clear sticky and verify upstream is called again
+		params.DB().Table("sticky_source").Delete(context.Background(), "test")
+
+		w2 := NewBufferedResponseWriter()
+		req2 := httptest.NewRequest(http.MethodGet, "/test/foo", nil)
+		f(handler).ServeHTTP(w2, req2)
+		waitForAsync()
+
+		assert.Equal(1, callCount) // upstream was called
+		assert.Equal(`{"ok": true}`, string(w2.buf))
+
+		// Successful response should have cleared the marker
+		_, exists = params.DB().Table("sticky_source").Get(context.Background(), "test")
+		assert.False(exists)
+	})
+
+	t.Run("sticky source not set when fail-on matches", func(t *testing.T) {
+		upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error": "bad request"}`))
+		}))
+		defer upstreamServer.Close()
+
+		params := newTestParams(&config.ServiceConfig{
+			Name: "test",
+			Upstream: &config.UpstreamConfig{
+				URL:           upstreamServer.URL,
+				StickyTimeout: 30 * time.Second,
+			},
+		})
+
+		f := CreateUpstreamRequestMiddleware(params)
+
+		w := NewBufferedResponseWriter()
+		req := httptest.NewRequest(http.MethodGet, "/test/foo", nil)
+		f(handler).ServeHTTP(w, req)
+		waitForAsync()
+
+		// fail-on matched (400 is in default range), so error returned directly
+		assert.Equal(http.StatusBadRequest, w.statusCode)
+
+		// No sticky marker should be set for the service
+		_, exists := params.DB().Table("sticky_source").Get(context.Background(), "test")
+		assert.False(exists)
+	})
+
+	t.Run("sticky source not used when sticky-timeout is zero", func(t *testing.T) {
+		upstreamCalls := 0
+		upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			upstreamCalls++
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error": "fail"}`))
+		}))
+		defer upstreamServer.Close()
+
+		params := newTestParams(&config.ServiceConfig{
+			Name: "test",
+			Upstream: &config.UpstreamConfig{
+				URL: upstreamServer.URL,
+			},
+		})
+
+		f := CreateUpstreamRequestMiddleware(params)
+
+		w1 := NewBufferedResponseWriter()
+		req1 := httptest.NewRequest(http.MethodGet, "/test/foo", nil)
+		f(handler).ServeHTTP(w1, req1)
+		waitForAsync()
+
+		// Second request - upstream should still be called (no sticky behavior)
+		w2 := NewBufferedResponseWriter()
+		req2 := httptest.NewRequest(http.MethodGet, "/test/bar", nil)
+		f(handler).ServeHTTP(w2, req2)
+		waitForAsync()
+
+		assert.Equal(2, upstreamCalls)
+	})
+
 	t.Run("custom fail-on includes 5xx", func(t *testing.T) {
 		upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
