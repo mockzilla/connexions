@@ -213,6 +213,7 @@ Forward requests to a real backend:
 upstream:
   url: https://api.example.com
   timeout: 5s               # Request timeout (default: 5s)
+  sticky-timeout: 30s       # Sticky source duration (default: 0 = disabled)
   headers:
     X-Custom-Header: value
   fail-on:                   # Return these statuses directly (default: 400-499 except 401, 403)
@@ -222,6 +223,23 @@ upstream:
 
 When configured, requests are proxied to the upstream server.
 If the upstream fails (timeout, network error, or error status), Connexions falls back to generating mock responses.
+
+### Sticky Source
+
+When any request to a service receives a generated (fallback) response, all subsequent requests to that service automatically skip upstream for the configured duration. This prevents dependent requests from hitting an upstream that is down or has no state from generated responses.
+
+```yaml
+upstream:
+  url: https://api.example.com
+  sticky-timeout: 30s   # 0 or omitted = disabled (default)
+```
+
+| Configuration | Behavior |
+|---|---|
+| Not set / `0` | Disabled - every request tries upstream normally |
+| `sticky-timeout: 30s` | After a generator fallback, all requests skip upstream for 30s |
+
+The sticky marker is cleared when the upstream returns a successful response, so normal routing resumes as soon as upstream is working again.
 
 ### Fail-On
 
@@ -241,6 +259,56 @@ upstream:
 | Not set (omitted) | Default: `400-499` except `401` and `403` are returned directly |
 | `fail-on: []` | Disabled - all errors fall back to the generator |
 | `fail-on: [{range: "400-499"}]` | All 4xx returned directly (no exceptions) |
+
+#### Body Matching
+
+You can refine fail-on rules based on the response body using the `body` field.
+The body is parsed as JSON and fields are matched using dot-notation paths.
+
+```yaml
+fail-on:
+  - range: "400-499"
+    body:
+      default: fail            # "fail" (default) or "except"
+      fail:                    # Fail when ALL conditions match
+        - path: "code"
+          equals: 496
+      except:                  # Don't fail when ALL conditions match
+        - path: "code"
+          equals: 497
+```
+
+- `body.fail` - always fail when all conditions match (return error to client).
+- `body.except` - never fail when all conditions match (fall through to generator).
+- `body.default` - decides the outcome when neither `fail` nor `except` match, or when both match. Defaults to `"fail"`.
+- `path` uses dot notation for nested fields (e.g. `"error.detail.code"`).
+- `equals` supports any JSON-compatible value: string, number, boolean.
+- Multiple conditions within `fail` or `except` are AND-ed: all must match.
+
+**Examples:**
+
+Don't fail on 400 when response body contains `"code": 496` (fall through to generator instead):
+
+```yaml
+fail-on:
+  - range: "400-499"
+    body:
+      except:
+        - path: "code"
+          equals: 496
+```
+
+Only fail on 400 when body contains a specific error code:
+
+```yaml
+fail-on:
+  - exact: 400
+    body:
+      default: except
+      fail:
+        - path: "error.code"
+          equals: "VALIDATION_ERROR"
+```
 
 ## Response Headers
 

@@ -155,11 +155,13 @@ upstream:
 
 1. Request arrives at Connexions
 2. Upstream middleware forwards request to `https://api.example.com`
-3. If successful → return upstream response
-4. If failed and status matches `fail-on` → return upstream error directly
-5. If failed otherwise → proceed to mock handler (fallback)
+3. If successful -> return upstream response
+4. If failed and status matches `fail-on` -> return upstream error directly
+5. If failed otherwise -> proceed to mock handler (fallback)
 
-By default, `400 Bad Request` is returned directly (configurable via `fail-on`).
+By default, `400-499` (except `401`, `403`) are returned directly. This is configurable via `fail-on`,
+which also supports response body matching to refine when to fail or fall through to the generator.
+See [Service Config - Fail-On](config/service.md#fail-on) for details.
 
 ## Response Caching
 
