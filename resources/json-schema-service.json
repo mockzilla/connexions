@@ -175,6 +175,11 @@
           "items": {
             "$ref": "#/definitions/http-status-match"
           }
+        },
+        "sticky-timeout": {
+          "type": "string",
+          "description": "When a request falls back to the generator, all subsequent requests to this service skip upstream for this duration (e.g., '30s'). 0 or omitted = disabled.",
+          "default": "0"
         }
       }
     }
@@ -197,8 +202,48 @@
           "items": {
             "type": "integer"
           }
+        },
+        "body": {
+          "type": "object",
+          "description": "Refine fail-on rules based on response body JSON fields.",
+          "properties": {
+            "default": {
+              "type": "string",
+              "enum": ["fail", "except"],
+              "default": "fail",
+              "description": "Decides the outcome when neither fail nor except conditions match, or when both match."
+            },
+            "fail": {
+              "type": "array",
+              "description": "Always fail (return error to client) when ALL conditions match.",
+              "items": {
+                "$ref": "#/definitions/body-match-condition"
+              }
+            },
+            "except": {
+              "type": "array",
+              "description": "Never fail (fall through to generator) when ALL conditions match.",
+              "items": {
+                "$ref": "#/definitions/body-match-condition"
+              }
+            }
+          }
         }
       }
+    },
+    "body-match-condition": {
+      "type": "object",
+      "description": "A condition matching a JSON field in the response body.",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Dot-notation path to a JSON field (e.g., 'error.detail.code')."
+        },
+        "equals": {
+          "description": "Value to compare against. Supports string, number, or boolean."
+        }
+      },
+      "required": ["path", "equals"]
     }
   }
 }
