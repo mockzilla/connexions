@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"net/http"
-	"time"
 )
 
 // CreateReplayReadMiddleware returns middleware that checks for a matching replay recording.
@@ -49,11 +48,6 @@ func CreateReplayReadMiddleware(params *Params) func(http.Handler) http.Handler 
 			}
 
 			RequestLog(log, req).Info("Replay hit", "method", req.Method, "path", req.URL.Path)
-
-			// Update hit stats
-			rec.HitCount++
-			rec.LastReplayedAt = time.Now()
-			table.Set(req.Context(), key, rec, replayTTL(cfg))
 
 			// Restore recorded headers
 			for k, v := range rec.Headers {

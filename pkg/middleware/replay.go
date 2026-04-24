@@ -40,8 +40,6 @@ const headerReplayMatch = "X-Cxs-Replay"
 // RequestBody is the original request body (stored for debugging).
 // MatchValues maps field paths to their extracted values (stored for debugging).
 // CreatedAt is when the recording was created.
-// HitCount is the number of times this recording has been replayed.
-// LastReplayedAt is the last time this recording was served.
 type ReplayRecord struct {
 	Method         string            `json:"method"`
 	Path           string            `json:"path"`
@@ -54,8 +52,6 @@ type ReplayRecord struct {
 	RequestBody    []byte            `json:"requestBody"`
 	MatchValues    map[string]any    `json:"matchValues"`
 	CreatedAt      time.Time         `json:"createdAt"`
-	HitCount       int               `json:"hitCount"`
-	LastReplayedAt time.Time         `json:"lastReplayedAt,omitempty"`
 }
 
 // parseReplayHeader parses the X-Cxs-Replay header value into a ReplayMatch.
