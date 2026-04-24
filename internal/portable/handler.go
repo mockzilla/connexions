@@ -104,6 +104,8 @@ func (h *handler) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	op := h.factory.FindOperation(specPath, r.Method)
+
 	// Set response headers from the generated response
 	for key, values := range resp.Headers {
 		for _, v := range values {
@@ -111,13 +113,20 @@ func (h *handler) handleRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Set content-type if not already set by response headers
+	// Set content-type if not already set by response headers.
+	// Prefer the content-type declared in the spec for this operation's success
+	// response, falling back to application/json when the spec doesn't declare one.
 	if w.Header().Get("Content-Type") == "" {
-		w.Header().Set("Content-Type", "application/json")
+		contentType := "application/json"
+		if op != nil && op.Response != nil {
+			if item := op.Response.GetSuccess(); item != nil && item.ContentType != "" {
+				contentType = item.ContentType
+			}
+		}
+		w.Header().Set("Content-Type", contentType)
 	}
 
 	// Determine status code from the spec
-	op := h.factory.FindOperation(specPath, r.Method)
 	if op != nil && op.Response != nil && op.Response.SuccessCode > 0 {
 		w.WriteHeader(op.Response.SuccessCode)
 	}

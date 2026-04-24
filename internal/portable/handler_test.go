@@ -114,6 +114,41 @@ func TestHandler_handleRequest(t *testing.T) {
 	})
 }
 
+func TestHandler_ContentTypeFromSpec(t *testing.T) {
+	// Spec declares text/html success response; handler must propagate that
+	// content-type rather than defaulting to application/json.
+	specBytes := []byte(`openapi: 3.0.0
+info:
+  title: Static
+  version: "1.0.0"
+paths:
+  /welcome:
+    get:
+      operationId: getWelcome
+      responses:
+        "200":
+          description: OK
+          content:
+            text/html:
+              schema:
+                type: string
+              example: "<html><body>hi</body></html>"
+`)
+	h, err := newHandler(specBytes)
+	require.NoError(t, err)
+
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/welcome", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "text/html", w.Header().Get("Content-Type"))
+	assert.NotEmpty(t, w.Body.Bytes())
+}
+
 func TestHandler_MountedUnderServicePrefix(t *testing.T) {
 	specBytes := loadTestSpec(t, "petstore.yml")
 	h, err := newHandler(specBytes)
