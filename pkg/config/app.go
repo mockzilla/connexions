@@ -11,11 +11,11 @@ import (
 
 // AppConfig is the app configuration.
 type AppConfig struct {
-	Title       string `yaml:"title"`
-	Port        int    `yaml:"port"`
+	Title       string `yaml:"title" env:"APP_TITLE"`
+	Port        int    `yaml:"port" env:"APP_PORT"`
 	BaseURL     string `yaml:"baseURL" env:"APP_BASE_URL"`
 	InternalURL string `yaml:"internalURL" env:"APP_INTERNAL_URL"`
-	HomeURL     string `yaml:"homeURL"`
+	HomeURL     string `yaml:"homeURL" env:"APP_HOME_URL"`
 	ServiceURL  string `yaml:"serviceURL" env:"APP_SERVICE_URL"`
 
 	// AssetsURL is the base URL for static UI assets (CSS, JS, images, icons).
@@ -23,7 +23,7 @@ type AppConfig struct {
 	AssetsURL string `yaml:"assetsURL" env:"APP_ASSETS_URL"`
 
 	ContextAreaPrefix string            `yaml:"contextAreaPrefix"`
-	DisableUI         bool              `yaml:"disableUI"`
+	DisableUI         bool              `yaml:"disableUI" env:"APP_DISABLE_UI"`
 	Paths             Paths             `yaml:"-"`
 	Editor            *EditorConfig     `yaml:"editor"`
 	History           *AppHistoryConfig `yaml:"history"`
@@ -46,7 +46,7 @@ func NewDefaultAppHistoryConfig() *AppHistoryConfig {
 
 // AppHistoryConfig configures request/response history at the application level.
 type AppHistoryConfig struct {
-	Enabled  *bool         `yaml:"enabled"`
+	Enabled  *bool         `yaml:"enabled" env:"ROUTER_HISTORY_ENABLED"`
 	URL      string        `yaml:"url"`
 	Duration time.Duration `yaml:"duration" env:"ROUTER_HISTORY_DURATION"`
 }
