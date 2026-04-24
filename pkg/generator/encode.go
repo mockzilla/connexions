@@ -13,6 +13,11 @@ func encodeContent(content any, contentType string) ([]byte, error) {
 		return nil, nil
 	}
 
+	// Pre-serialized content (e.g. static-file responses) passes through as-is.
+	if rm, ok := content.(json.RawMessage); ok {
+		return rm, nil
+	}
+
 	switch contentType {
 	case "application/json", "":
 		// Empty content-type defaults to JSON
