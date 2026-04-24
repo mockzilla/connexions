@@ -167,4 +167,32 @@ func TestEncodeContent(t *testing.T) {
 		assert.Error(err)
 		assert.Nil(result)
 	})
+
+	t.Run("json.RawMessage passes through for text/html", func(t *testing.T) {
+		content := json.RawMessage("<html><body>hi</body></html>")
+		result, err := encodeContent(content, "text/html")
+		assert.NoError(err)
+		assert.Equal([]byte("<html><body>hi</body></html>"), result)
+	})
+
+	t.Run("json.RawMessage passes through for application/xml", func(t *testing.T) {
+		content := json.RawMessage(`<root><name>John</name></root>`)
+		result, err := encodeContent(content, "application/xml")
+		assert.NoError(err)
+		assert.Equal([]byte(`<root><name>John</name></root>`), result)
+	})
+
+	t.Run("json.RawMessage passes through for application/json", func(t *testing.T) {
+		content := json.RawMessage(`{"name":"John"}`)
+		result, err := encodeContent(content, "application/json")
+		assert.NoError(err)
+		assert.Equal([]byte(`{"name":"John"}`), result)
+	})
+
+	t.Run("json.RawMessage passes through for text/plain", func(t *testing.T) {
+		content := json.RawMessage("plain text body")
+		result, err := encodeContent(content, "text/plain")
+		assert.NoError(err)
+		assert.Equal([]byte("plain text body"), result)
+	})
 }
